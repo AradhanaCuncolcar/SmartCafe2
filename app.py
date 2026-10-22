@@ -32,10 +32,11 @@ CSS = """
 [data-testid="stHeader"] { background: transparent; }
 section[data-testid="stSidebar"] { background: #E8D5C0; }
 .cover { text-align:center; font-family:Lora,serif; color:#F3E3C8; letter-spacing:6px; text-transform:uppercase; font-size:15px; margin:4px 0 14px 0; }
-.st-key-book { position:relative; border-radius:10px; box-shadow:0 30px 60px rgba(0,0,0,.55); padding:34px 44px 40px 44px;
+.st-key-book { position:relative; perspective:2400px; border-radius:10px; box-shadow:0 30px 60px rgba(0,0,0,.55); padding:34px 44px 40px 44px;
   background: linear-gradient(to right,#E4D3B5 0%,#F6ECDA 5%,#F6ECDA 47.5%,#C9B48F 49.6%,#9C8560 50%,#C9B48F 50.4%,#F6ECDA 52.5%,#F6ECDA 95%,#E4D3B5 100%); }
-.st-key-book::before { content:""; position:absolute; right:70px; top:-6px; width:30px; height:84px; background:#8C2F1F;
+.ribbon { position:absolute; right:70px; top:-6px; width:30px; height:84px; background:#8C2F1F; z-index:60;
   clip-path:polygon(0 0,100% 0,100% 100%,50% 82%,0 100%); }
+[data-stale="true"] { opacity:1 !important; transition:none !important; }
 .st-key-book, .st-key-book p, .st-key-book label, .st-key-book li, .st-key-book span, .st-key-book div { font-family:Lora,serif; color:#3A2417; }
 .st-key-book [data-testid="stMetricValue"] { font-family:'Playfair Display',serif; font-weight:700; }
 .st-key-book [data-testid="stMetric"] { background:transparent; border:1.5px solid #7A4A18; border-radius:10px; padding:8px 14px; }
@@ -63,7 +64,33 @@ section[data-testid="stSidebar"] { background: #E8D5C0; }
 @media (max-width: 800px) { .st-key-book { background:#F6ECDA; padding:24px 18px; } }
 </style>
 """
-st.markdown(CSS, unsafe_allow_html=True)
+CSS = CSS.replace(".st-key-book", '[class*="st-key-book"]')
+
+# Page-flip animation. A blank "leaf" of paper turns about the spine (rotateY) while two blank page covers
+# hide the swap; the new spread is revealed as the leaf lands. Two names (a/b) per direction so that the
+# animation restarts on every click.
+PAPER_L = "linear-gradient(to right,#D8C5A3 0%,#F6ECDA 16%,#F6ECDA 100%)"      # hinge on the left edge
+PAPER_R = "linear-gradient(to left,#D8C5A3 0%,#F6ECDA 16%,#F6ECDA 100%)"       # hinge on the right edge
+LINES = "repeating-linear-gradient(to bottom,transparent 0 27px,rgba(122,74,24,.10) 27px 28px)"
+ANIM = "<style>"
+for d, sgn, origin, leaf_side, cover_side, rad_leaf, rad_cover, leaf_bg, cover_bg in (
+        ("next", -1, "left center", "left:50%", "left:0", "0 10px 10px 0", "10px 0 0 10px", PAPER_L, PAPER_R),
+        ("back", 1, "right center", "left:0", "left:50%", "10px 0 0 10px", "0 10px 10px 0", PAPER_R, PAPER_L)):
+    for p in ("a", "b"):
+        cls = f".st-key-book_{d}_{p}"
+        ANIM += (f"@keyframes leaf_{d}_{p}{{0%{{transform:rotateY(0deg);box-shadow:0 0 0 rgba(0,0,0,0);opacity:1}}"
+                 f"40%{{transform:rotateY({sgn * 70}deg);box-shadow:{sgn * 22}px 0 44px rgba(0,0,0,.38)}}"
+                 f"55%{{transform:rotateY({sgn * 100}deg)}}"
+                 f"88%{{transform:rotateY({sgn * 176}deg);opacity:1}}100%{{transform:rotateY({sgn * 180}deg);opacity:0}}}}"
+                 f"@keyframes cover_{d}_{p}{{0%,86%{{opacity:1}}100%{{opacity:0}}}}"
+                 f"{cls}::after{{content:'';position:absolute;top:0;bottom:0;{leaf_side};width:50%;z-index:50;pointer-events:none;"
+                 f"transform-origin:{origin};border-radius:{rad_leaf};background:{LINES},{leaf_bg};"
+                 f"animation:leaf_{d}_{p} 1.15s cubic-bezier(.45,.05,.25,1) both}}"
+                 f"{cls}::before{{content:'';position:absolute;top:0;bottom:0;{cover_side};width:50%;z-index:40;pointer-events:none;"
+                 f"border-radius:{rad_cover};background:{LINES},{cover_bg};animation:cover_{d}_{p} 1.15s linear both}}")
+ANIM += ("@media (max-width:800px),(prefers-reduced-motion:reduce){[class*='st-key-book']::before,"
+         "[class*='st-key-book']::after{display:none !important}}</style>")
+st.markdown(CSS + ANIM, unsafe_allow_html=True)
 
 # ------------------------------------------------------------------ settings
 DEFAULTS = dict(base_demand=7, spoilage_cost=1.5, stockout_penalty=6.0, weekend_boost=1.6, event_chance=0.15)
@@ -97,6 +124,8 @@ def apply_values(values):
 
 def go(delta):
     ss["page"] = max(0, min(len(PAGES) - 1, ss["page"] + delta))
+    ss["flip_n"] = ss.get("flip_n", 0) + 1
+    ss["flip_dir"] = "next" if delta > 0 else "back"
 
 
 for k, v in DEFAULTS.items():
@@ -140,6 +169,7 @@ if "model" not in ss or train_clicked or ss.pop("auto_train", False):
         ss["model"] = train_model(cfg_now, int(ss["sl_episodes"]))
     if "baseline" not in ss or cfg_now == DEFAULTS:
         ss["baseline"] = ss["model"]
+    ss["warm_eval"] = True
 
 model, baseline = ss["model"], ss["baseline"]
 cfg = model["cfg"]
@@ -172,6 +202,11 @@ def get_eval(m):
         sweep = [average_profit(e, lambda s, a=a: a, months=100)[0] for a in range(e.max_stock + 1)]
         m["eval"] = dict(res=res, sweep=sweep)
     return m["eval"]
+
+
+if ss.pop("warm_eval", False):   # pre-compute the scoreboard numbers so page turns stay snappy
+    with st.spinner("Counting the takings..."):
+        get_eval(model)
 
 
 def style_ax(ax):
@@ -501,7 +536,10 @@ def page_experiments(L, R):
 PAGE_FUNCS = [page_briefing, page_learning, page_strategy, page_scoreboard, page_game, page_experiments]
 
 # ------------------------------------------------------------------ the book + page turning
-with st.container(key="book"):
+flip_dir = ss.get("flip_dir")
+book_key = f"book_{flip_dir}_{'a' if ss.get('flip_n', 0) % 2 else 'b'}" if flip_dir else "book"
+with st.container(key=book_key):
+    st.markdown('<div class="ribbon"></div>', unsafe_allow_html=True)
     left_page, right_page = st.columns(2, gap="large")
     PAGE_FUNCS[ss["page"]](left_page, right_page)
 
