@@ -48,10 +48,10 @@ section[data-testid="stSidebar"] { background: #E8D5C0; }
 .st-key-book * { scrollbar-width:thin; scrollbar-color:#C9B48F transparent; }
 .st-key-book { box-sizing:border-box; }
 .ch { font-size:13px; letter-spacing:3px; text-transform:uppercase; color:#7A4A18 !important; margin-top:4px; }
-.pt { font-family:'Playfair Display',serif !important; font-size:36px; margin:4px 0 2px 0; padding:0; color:#3A2417; }
-.rule { height:2px; background:#7A4A18; width:90px; margin:10px 0 16px 0; }
+.pt { font-family:'Playfair Display',serif !important; font-size:32px; margin:2px 0 0 0; padding:0; color:#3A2417; }
+.rule { height:2px; background:#7A4A18; width:90px; margin:8px 0 12px 0; }
 .sub { font-style:italic; margin-bottom:10px; }
-.folio { font-size:14px; color:#7A4A18 !important; margin-top:14px; }
+.folio { font-size:15px; color:#7A4A18 !important; margin:-6px 0 0 0; }
 .rec-card { background:#3E2723; border-radius:12px; padding:16px 22px; margin:10px 0 12px 0; }
 .rec-card, .rec-card div, .rec-card span { color:#F6ECDA !important; }
 .rec-card .big { font-family:'Playfair Display',serif; font-size:2.3rem; font-weight:700; color:#E2A96B !important; }
@@ -100,7 +100,7 @@ st.markdown(CSS + ANIM, unsafe_allow_html=True)
 DEFAULTS = dict(base_demand=7, spoilage_cost=1.5, stockout_penalty=6.0, weekend_boost=1.6, event_chance=0.15)
 DEFAULT_EPISODES = 15000
 GAME_DAYS = 10
-PAGE_H = 690          # every page is exactly this tall, so the book never changes size
+PAGE_H = 820          # every page is exactly this tall, so the book never changes size
 CAUTIOUS, GENEROUS = 4, 10
 RL = "RL agent"
 PAGES = [("Chapter I", "Morning Briefing"), ("Chapter II", "Learning"), ("Chapter III", "The Strategy"),
@@ -240,10 +240,6 @@ def head(chapter, title, sub=None):
     st.markdown(html, unsafe_allow_html=True)
 
 
-def folio(n):
-    st.markdown(f'<div class="folio">{n}</div>', unsafe_allow_html=True)
-
-
 # ------------------------------------------------------------------ actions (callbacks)
 def submit_order(stock, dow, event, rec, order):
     e = make_env(cfg)
@@ -304,39 +300,36 @@ def page_briefing(L, R):
             <span class="pill">expect about {exp_d:.0f} customers</span><span class="pill">{after} units on the shelf</span></div>""",
                     unsafe_allow_html=True)
         if exp_d > MAX:
-            st.warning(f"Expected demand ({exp_d:.0f}) is more than the fridge holds ({MAX}). "
-                       "Even a full fridge may run out - plan a mid-day top-up if you can.")
+            st.warning(f"Expected demand ({exp_d:.0f}) is more than the {MAX}-unit fridge.")
         qrow = model["Q"][int(stock_in), dow_i, evt_i]
         if np.all(qrow == 0):
-            st.info("The AI rarely saw this exact situation in training, so treat its advice with care.")
+            st.info("Rarely seen in training - treat this advice with care.")
         order_in = st.number_input("Your order (change it to override the AI)", 0, MAX, value=rec)
         st.button("Submit order and close the day", on_click=submit_order,
                   args=(int(stock_in), dow_i, evt_i, rec, int(order_in)), use_container_width=True)
-        folio(1)
     with R:
         head("Chapter I &middot; continued", "The Day's Ledger")
-        fig, ax = new_fig(5.4, 2.3)
+        fig, ax = new_fig(5.4, 2.0)
         ax.bar(range(MAX + 1), qrow, color=[CARAMEL if a == rec else LATTE for a in range(MAX + 1)])
         ax.set_xlabel("Units ordered"); ax.set_ylabel("AI's score")
         ax.set_title("How the AI rates each order (taller is better)", fontsize=10, color=INK)
         show(fig)
         if ss["ledger"]:
             df = pd.DataFrame(ss["ledger"])
-            a, b = st.columns(2)
-            a.metric("Your total profit", f"AED {df['Your profit'].sum():,.0f}")
-            b.metric("AI on same days", f"AED {df['AI profit'].sum():,.0f}",
-                     delta=f"{df['Your profit'].sum() - df['AI profit'].sum():,.0f} you vs AI")
-            c, d = st.columns(2)
-            c.metric("Spoiled units", int(df["Spoiled"].sum()))
-            d.metric("Missed customers", int(df["Missed"].sum()))
-            st.dataframe(df.tail(8), hide_index=True)
-            last = ss["ledger"][-1]
-            st.caption(f"Last day: AED {last['Your profit']:,.1f} (the AI would have made AED {last['AI profit']:,.1f}). "
-                       "Tomorrow's stock and weekday are filled in for you.")
-            st.button("Clear the ledger", on_click=lambda: ss.update(ledger=[]))
+            yours, ais = df["Your profit"].sum(), df["AI profit"].sum()
+            cards = [("Your profit", f"AED {yours:,.0f}"), ("AI, same days", f"AED {ais:,.0f}"),
+                     ("Spoiled", int(df["Spoiled"].sum())), ("Missed", int(df["Missed"].sum()))]
+            st.markdown('<div style="display:flex;gap:8px">' + "".join(
+                f'<div style="flex:1;border:1.5px solid {GOLD};border-radius:10px;padding:6px 10px">'
+                f'<div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:{GOLD}">{a}</div>'
+                f'<div style="font-family:\'Playfair Display\',serif;font-size:20px;font-weight:700">{b}</div></div>'
+                for a, b in cards) + '</div>', unsafe_allow_html=True)
+            st.dataframe(df.drop(columns=["Event", "Overrode AI?"]).tail(5), hide_index=True)
+            c, d = st.columns([3, 1], vertical_alignment="center")
+            c.caption(f"You vs AI: AED {yours - ais:+,.0f}. Tomorrow's stock and weekday are filled in for you.")
+            d.button("Clear", on_click=lambda: ss.update(ledger=[]))
         else:
             st.info("The ledger is empty. Submit your first morning order to start tracking.")
-        folio(2)
 
 
 # ================================================================== CHAPTER II: Learning
@@ -357,7 +350,6 @@ def page_learning(L, R):
         show(fig)
         st.caption("The curve is noisy and climbs gradually - that is normal. Early on the AI explores with random orders; "
                    "later it mostly uses what it learned.")
-        folio(3)
     with R:
         head("Chapter II &middot; continued", "How Well It Does")
         a, b = st.columns(2)
@@ -370,7 +362,6 @@ def page_learning(L, R):
         e_.metric("Spoilage rate", f"{rl['spoil'] * 100:.0f}%")
         st.markdown("**Service level** is the share of customers who got what they wanted. **Spoilage rate** is the share of "
                     "ordered units thrown away. The trained average is measured over 300 fresh months with no exploring.")
-        folio(4)
 
 
 # ================================================================== CHAPTER III: Strategy
@@ -390,7 +381,6 @@ def page_strategy(L, R):
         ax.set_xticks(range(7)); ax.set_xticklabels([d[:3] for d in DAY_NAMES])
         ax.set_yticks(range(MAX + 1)); ax.set_ylabel("Stock on hand in the morning"); ax.set_title("Units to order", color=INK)
         show(fig)
-        folio(5)
     with R:
         head("Chapter III &middot; continued", "How Full to Fill the Fridge")
         rows = []
@@ -405,7 +395,6 @@ def page_strategy(L, R):
                     "a full shelf means order little or nothing, and weekends and events call for bigger orders.")
         st.caption("Some high-stock cells look odd because the AI rarely visits them in training, so those values are less "
                    "reliable - normal for tabular Q-learning.")
-        folio(6)
 
 
 # ================================================================== CHAPTER IV: Scoreboard
@@ -428,7 +417,6 @@ def page_scoreboard(L, R):
         show(fig)
         if not human:
             st.info("Play the *You vs the AI* chapter to add yourself to this scoreboard.")
-        folio(7)
     with R:
         head("Chapter IV &middot; continued", "The Small Print")
         tbl = pd.DataFrame([{"Manager": n, "Avg monthly profit (AED)": round(v["mean"]), "Swing (±)": round(v["std"]),
@@ -443,7 +431,6 @@ def page_scoreboard(L, R):
             show(fig)
             st.caption("There is a sweet spot for a single fixed number - but nobody knows it in advance, and it can't react "
                        "to weekends, events or leftover stock. The AI finds it, then goes beyond it.")
-        folio(8)
 
 
 # ================================================================== CHAPTER V: You vs the AI
@@ -473,7 +460,6 @@ def page_game(L, R):
                 st.info("The AI won this round. The table shows where the orders differed.")
             st.caption("Your result is now on the Scoreboard.")
             st.button("Play again", on_click=new_game, use_container_width=True)
-        folio(9)
     with R:
         head("Chapter V &middot; continued", "The Order Book")
         if not done:
@@ -492,7 +478,6 @@ def page_game(L, R):
                              "AI: stock": a_["start"], "AI: order": a_["order"], "AI: profit": a_["profit"]})
             st.dataframe(pd.DataFrame(rows), hide_index=True)
             st.caption("* marks a local-event day.")
-        folio(10)
 
 
 # ================================================================== CHAPTER VI: Experiments
@@ -503,7 +488,6 @@ def page_experiments(L, R):
         st.write("Pick an experiment (it sets the sliders and retrains the AI), or use the sidebar sliders and press **Train**.")
         for i, name in enumerate(PRESETS):
             st.button(name, on_click=apply_values, args=(PRESETS[name],), key=f"preset_{i}", use_container_width=True)
-        folio(11)
     with R:
         head("Chapter VI &middot; continued", "The Result")
         if same:
@@ -535,7 +519,6 @@ def page_experiments(L, R):
             b.metric("Retrained strategy", f"AED {new_profit:,.0f}", delta=f"{new_profit - model['base_in_new']:,.0f}")
             st.caption("This is why you retrain when costs change: the AI optimises exactly the rewards you give it. "
                        "Raise spoilage cost and it orders less; raise the stockout penalty and it keeps a bigger safety buffer.")
-        folio(12)
 
 
 PAGE_FUNCS = [page_briefing, page_learning, page_strategy, page_scoreboard, page_game, page_experiments]
@@ -551,6 +534,9 @@ with st.container(key=book_key):
     with right_col:
         right_page = st.container(height=PAGE_H, border=False)
     PAGE_FUNCS[ss["page"]](left_page, right_page)
+    num_l, num_r = st.columns(2, gap="large")
+    num_l.markdown(f'<div class="folio">{2 * ss["page"] + 1}</div>', unsafe_allow_html=True)
+    num_r.markdown(f'<div class="folio" style="text-align:right">{2 * ss["page"] + 2}</div>', unsafe_allow_html=True)
 
 n = ss["page"]
 dots = "".join(f'<span style="width:{14 if k == n else 9}px;background:{"#D9A55E" if k == n else "#6B4A38"}"></span>'
