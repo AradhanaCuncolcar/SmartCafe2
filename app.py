@@ -43,6 +43,8 @@ section[data-testid="stSidebar"] { background: #E8D5C0; }
 .st-key-book .stButton button { background:#3E2723; border:0; border-radius:22px; min-height:44px; font-weight:600; }
 .st-key-book .stButton button p { color:#F6ECDA; }
 .st-key-book .stButton button:hover { background:#8C2F1F; }
+/* keep Streamlit's icon font (expander arrows etc.) - the Lora rule above must not touch it */
+.st-key-book [data-testid="stIconMaterial"], .st-key-book span[class*="material"] { font-family:"Material Symbols Rounded","Material Symbols Outlined" !important; }
 .ch { font-size:13px; letter-spacing:3px; text-transform:uppercase; color:#7A4A18 !important; margin-top:4px; }
 .pt { font-family:'Playfair Display',serif !important; font-size:36px; margin:4px 0 2px 0; padding:0; color:#3A2417; }
 .rule { height:2px; background:#7A4A18; width:90px; margin:10px 0 16px 0; }
