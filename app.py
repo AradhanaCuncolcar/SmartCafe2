@@ -45,6 +45,8 @@ section[data-testid="stSidebar"] { background: #E8D5C0; }
 .st-key-book .stButton button:hover { background:#8C2F1F; }
 /* keep Streamlit's icon font (expander arrows etc.) - the Lora rule above must not touch it */
 .st-key-book [data-testid="stIconMaterial"], .st-key-book span[class*="material"] { font-family:"Material Symbols Rounded","Material Symbols Outlined" !important; }
+.st-key-book * { scrollbar-width:thin; scrollbar-color:#C9B48F transparent; }
+.st-key-book { box-sizing:border-box; }
 .ch { font-size:13px; letter-spacing:3px; text-transform:uppercase; color:#7A4A18 !important; margin-top:4px; }
 .pt { font-family:'Playfair Display',serif !important; font-size:36px; margin:4px 0 2px 0; padding:0; color:#3A2417; }
 .rule { height:2px; background:#7A4A18; width:90px; margin:10px 0 16px 0; }
@@ -98,6 +100,7 @@ st.markdown(CSS + ANIM, unsafe_allow_html=True)
 DEFAULTS = dict(base_demand=7, spoilage_cost=1.5, stockout_penalty=6.0, weekend_boost=1.6, event_chance=0.15)
 DEFAULT_EPISODES = 15000
 GAME_DAYS = 10
+PAGE_H = 690          # every page is exactly this tall, so the book never changes size
 CAUTIOUS, GENEROUS = 4, 10
 RL = "RL agent"
 PAGES = [("Chapter I", "Morning Briefing"), ("Chapter II", "Learning"), ("Chapter III", "The Strategy"),
@@ -542,7 +545,11 @@ flip_dir = ss.get("flip_dir")
 book_key = f"book_{flip_dir}_{'a' if ss.get('flip_n', 0) % 2 else 'b'}" if flip_dir else "book"
 with st.container(key=book_key):
     st.markdown('<div class="ribbon"></div>', unsafe_allow_html=True)
-    left_page, right_page = st.columns(2, gap="large")
+    left_col, right_col = st.columns(2, gap="large")
+    with left_col:
+        left_page = st.container(height=PAGE_H, border=False)     # fixed-size page; long content scrolls inside it
+    with right_col:
+        right_page = st.container(height=PAGE_H, border=False)
     PAGE_FUNCS[ss["page"]](left_page, right_page)
 
 n = ss["page"]
